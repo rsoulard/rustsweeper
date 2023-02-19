@@ -1,0 +1,18 @@
+[package]
+name = "rustsweeper"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rustsweeper"
+path = "src/main.rs"
+
+[lib]
+name = "game"
+path = "src/game/game.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.sdl2]
+version = "0.35.2"
+features = ["image", "bundled"]
