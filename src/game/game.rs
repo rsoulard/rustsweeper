@@ -2,6 +2,7 @@ extern crate sdl2;
 
 use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture}};
 use std::{time::Duration, thread};
+use rand::{self, thread_rng, Rng};
 
 static ADJACENCY_OFFSET_TABLE: [(i32, i32); 8]  = [
     (0, 1), 
@@ -28,20 +29,7 @@ pub fn run() {
     let texture_ctreator = canvas.texture_creator();
     let texture = texture_ctreator.load_texture("assets/spritesheet.png").unwrap();
 
-    let mut cell_map = CellMap::new(9, 9);
-
-    cell_map.place_bomb(1, 1);
-    cell_map.place_bomb(0, 0);
-    cell_map.place_bomb(5, 5);
-    cell_map.place_bomb(3, 7);
-    cell_map.place_bomb(5, 2);
-    cell_map.place_bomb(6, 2);
-    cell_map.place_bomb(7, 2);
-    cell_map.place_bomb(5, 3);
-    cell_map.place_bomb(7, 3);
-    cell_map.place_bomb(5, 4);
-    cell_map.place_bomb(6, 4);
-    cell_map.place_bomb(7, 4);
+    let mut cell_map = CellMap::new(9, 9, 12);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -64,7 +52,7 @@ pub fn run() {
         for x in 0..cell_map.width {
             for y in 0..cell_map.height {
                 if let Some(cell) = cell_map.get_cell(x as i32, y as i32) {
-                    render_cell(&mut canvas, &texture, x as i32, y as i32, &cell)
+                    render_cell(&mut canvas, &texture, x as i32, y as i32, cell)
                 }
             }
         }
@@ -144,11 +132,13 @@ impl Default for Cell {
 struct CellMap {
     width : usize,
     height : usize,
-    cells : Vec::<Cell>
+    cells : Vec::<Cell>,
+    has_generated: bool,
+    trap_count: usize
 }
 
 impl CellMap {
-    fn new(width: usize, height: usize) -> Self {
+    fn new(width: usize, height: usize, trap_count: usize) -> Self {
         let mut cells = Vec::<Cell>::with_capacity(width * height);
 
         let total = width * height;
@@ -161,6 +151,8 @@ impl CellMap {
             cells,
             width,
             height,
+            has_generated: false,
+            trap_count
         }
     }
 
@@ -187,6 +179,10 @@ impl CellMap {
     }
 
     fn reveal_cell(&mut self, x: i32, y: i32) {
+        if !self.has_generated {
+            self.generate(x, y);
+        }
+
         if let Some(cell) = self.get_cell(x, y) {
             match cell {
                 Cell {is_trap: false, adjacent_trap_count: 0, hidden: true} => {
@@ -201,5 +197,25 @@ impl CellMap {
                 //_ => {}
             }
         }
+    }
+
+    fn generate(&mut self, first_x: i32, first_y: i32) {
+        let mut traps_placed = 0;
+        let maximum_index = self.width * self.height;
+
+        while traps_placed < self.trap_count {
+            let random_index = thread_rng().gen_range(0..maximum_index);
+            let (x, y) = ((random_index % self.width) as i32, (random_index / self.height) as i32);
+
+            if (x, y) == (first_x, first_y) {
+                continue;
+            }
+
+            if let Some(Cell {is_trap: false, ..}) = self.get_cell(x, y) {
+                self.place_bomb(x, y);
+                traps_placed += 1;
+            }
+        }
+        self.has_generated = true;
     }
 }
