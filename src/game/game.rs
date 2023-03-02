@@ -1,8 +1,7 @@
 extern crate sdl2;
 
 use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture}};
-use std::{time::Duration, thread, collections::HashMap};
-
+use std::{time::Duration, thread};
 
 pub fn run() {
     let sdl_context = sdl2::init().unwrap();
@@ -18,13 +17,20 @@ pub fn run() {
     let texture_ctreator = canvas.texture_creator();
     let texture = texture_ctreator.load_texture("assets/spritesheet.png").unwrap();
 
-    let mut cell_map = HashMap::<(i32, i32), Cell>::new();
-    
-    for y in 0..9 {
-        for x in 0..9 {
-            cell_map.insert((x, y), Cell { hidden: true, is_bomb: true, adjacent_bombs: 0 });
-        }
-    }
+    let mut cell_map = CellMap::new(9, 9);
+
+    cell_map.place_bomb(1, 1);
+    cell_map.place_bomb(0, 0);
+    cell_map.place_bomb(5, 5);
+    cell_map.place_bomb(3, 7);
+    cell_map.place_bomb(5, 2);
+    cell_map.place_bomb(6, 2);
+    cell_map.place_bomb(7, 2);
+    cell_map.place_bomb(5, 3);
+    cell_map.place_bomb(7, 3);
+    cell_map.place_bomb(5, 4);
+    cell_map.place_bomb(6, 4);
+    cell_map.place_bomb(7, 4);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -35,7 +41,7 @@ pub fn run() {
                     break 'running
                 },
                 Event:: MouseButtonUp { x, y, ..} => {
-                    handle_left_click(x, y, &mut cell_map)
+                    handle_left_click(&mut cell_map, x, y)
                 }
                 _ => {}
             }
@@ -44,21 +50,10 @@ pub fn run() {
         canvas.set_draw_color(Color::BLACK);
         canvas.clear();
 
-        for (position, cell) in &cell_map {
-            let screen_rect = Rect::new(position.0 * 32 + 6, position.1 * 32 + 50, 32, 32);
-
-            if cell.hidden {
-                let sprite_rect = Rect::new(0, 0, 32, 32);
-                render_tile(&mut canvas, &texture, sprite_rect, screen_rect);
-            }
-
-            if !cell.hidden {
-                let sprite_rect = Rect::new(32, 0, 32, 32);
-                render_tile(&mut canvas, &texture, sprite_rect, screen_rect);
-
-                if cell.is_bomb {
-                    let sprite_rect = Rect::new(32 * (position.0 + 2), 0, 32, 32);
-                    render_tile(&mut canvas, &texture, sprite_rect, screen_rect);
+        for x in 0..cell_map.width {
+            for y in 0..cell_map.height {
+                if let Some(cell) = cell_map.get_cell(x as i32, y as i32) {
+                    render_cell(&mut canvas, &texture, x as i32, y as i32, &cell)
                 }
             }
         }
@@ -68,26 +63,230 @@ pub fn run() {
     }
 }
 
-fn render_tile(canvas: &mut WindowCanvas, texture: &Texture, sprite_rect: Rect, screen_rect: Rect) {
-    canvas.copy(&texture, sprite_rect, screen_rect).unwrap();
+fn render_cell(canvas: &mut WindowCanvas, texture: &Texture, x: i32, y: i32, cell: &Cell) {
+    let screen_rect = Rect::new(x * 32 + 6, y * 32 + 50, 32, 32);
+
+    match cell {
+        Cell {hidden: true, ..} => {
+            let sprite_rect = Rect::new(0, 0, 32, 32);
+            render(canvas, texture, sprite_rect, screen_rect);
+        },
+        Cell {hidden: false, ..} => {
+            let sprite_rect = Rect::new(32, 0, 32, 32);
+            render(canvas, texture, sprite_rect, screen_rect);
+
+            match cell {
+                Cell {is_trap: true, ..} => {
+                    let sprite_rect = Rect::new(32 * 2, 0, 32, 32);
+                    render(canvas, texture, sprite_rect, screen_rect);
+                },
+                Cell {is_trap: false, ..} if cell.adjacent_trap_count > 0 => {
+                    let sprite_rect = Rect::new(32 * (2 + cell.adjacent_trap_count as i32), 0, 32, 32);
+                    render(canvas, texture, sprite_rect, screen_rect);
+                },
+                _ => {}
+            }
+        }
+    }  
 }
 
-fn handle_left_click(x: i32, y: i32, cell_map: &mut HashMap<(i32, i32), Cell>) {
-    let key = ((x - 6)  / 32, (y - 50) / 32);
-    match cell_map.get_mut(&key) {
-        Some(cell) => cell.reveal(),
-        _ => {}
-    }
+fn render(canvas: &mut WindowCanvas, texture: &Texture, sprite_rect: Rect, screen_rect: Rect) {
+    canvas.copy(texture, sprite_rect, screen_rect).unwrap();
+}
+
+fn handle_left_click(cell_map: &mut CellMap, x: i32, y: i32) {
+    let (x, y) = ((x - 6)  / 32, (y - 50) / 32);
+
+    cell_map.reveal_cell(x, y);
 }
 
 struct Cell {
     hidden: bool,
-    is_bomb: bool,
-    adjacent_bombs: u8
+    is_trap: bool,
+    adjacent_trap_count: u8
 }
 
 impl Cell {
-    pub fn reveal (&mut self) {
+    fn reveal (&mut self) {
         self.hidden = false;
+    }
+
+    fn make_trap(&mut self) {
+        self.is_trap = true;
+    }
+
+    fn increment_adjacent_trap_count(&mut self) {
+        self.adjacent_trap_count += 1;
+    }
+}
+
+impl Default for Cell {
+    fn default() -> Self {
+        Self { 
+            hidden: true, 
+            is_trap: false, 
+            adjacent_trap_count: 0 
+        }
+    }
+}
+
+struct CellMap {
+    width : usize,
+    height : usize,
+    cells : Vec::<Cell>
+}
+
+impl CellMap {
+    fn new(width: usize, height: usize) -> Self {
+        let mut cells = Vec::<Cell>::with_capacity(width * height);
+
+        let total = width * height;
+
+        for _ in 0..total {
+            cells.push(Cell { ..Default::default() });
+        }
+
+        Self { 
+            cells,
+            width,
+            height,
+        }
+    }
+
+    fn get_cell(&mut self, x: i32, y: i32) -> Option<&mut Cell> {
+        let x = x as usize;
+        let y = y as usize;
+
+        match x < self.width &&  y < self.height {
+            true => Some(&mut self.cells[x + y * self.width]),
+            false => None
+        }
+    }
+
+    fn place_bomb(&mut self, x: i32, y: i32) {
+        if let Some(cell) = self.get_cell(x, y) {
+            cell.make_trap();
+        }
+
+        if let Some(cell) = self.get_cell(x, y + 1) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x + 1, y + 1) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x + 1, y) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x + 1, y - 1) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x, y - 1) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x - 1, y - 1) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x - 1, y) {
+            cell.increment_adjacent_trap_count();
+        }
+    
+        if let Some(cell) = self.get_cell(x - 1, y + 1) {
+            cell.increment_adjacent_trap_count();
+        }
+    }
+
+    fn reveal_cell(&mut self, x: i32, y: i32) {
+        if let Some(cell) = self.get_cell(x, y) {
+            match cell {
+                Cell {is_trap: false, adjacent_trap_count: 0, ..} => {
+                    cell.reveal();
+                    self.reveal_adjacent_empties(x, y);
+                },
+                Cell {is_trap: false, ..} => {
+                    cell.reveal();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn reveal_adjacent_empties(&mut self, x: i32, y: i32) {
+        if let Some(cell) = self.get_cell(x, y + 1) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x, y + 1);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x + 1, y + 1) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x + 1, y + 1);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x + 1, y) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x + 1, y);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x + 1, y - 1) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x + 1, y - 1);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x, y - 1) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x, y - 1);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x - 1, y - 1) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x - 1, y - 1);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x - 1, y) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x - 1, y);
+                }
+            }
+        }
+    
+        if let Some(cell) = self.get_cell(x - 1, y + 1) {
+            if let Cell {is_trap: false, hidden: true, ..} = cell {
+                cell.reveal();
+                if cell.adjacent_trap_count == 0 {
+                    self.reveal_adjacent_empties(x - 1, y + 1);
+                }
+            }
+        }
     }
 }
