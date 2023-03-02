@@ -3,6 +3,17 @@ extern crate sdl2;
 use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture}};
 use std::{time::Duration, thread};
 
+static ADJACENCY_OFFSET_TABLE: [(i32, i32); 8]  = [
+    (0, 1), 
+    (1, 1),
+    (1, 0),
+    (1, -1),
+    (0, -1),
+    (-1, -1),
+    (-1, 0),
+    (-1, 1)
+];
+
 pub fn run() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -168,124 +179,26 @@ impl CellMap {
             cell.make_trap();
         }
 
-        if let Some(cell) = self.get_cell(x, y + 1) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x + 1, y + 1) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x + 1, y) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x + 1, y - 1) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x, y - 1) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x - 1, y - 1) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x - 1, y) {
-            cell.increment_adjacent_trap_count();
-        }
-    
-        if let Some(cell) = self.get_cell(x - 1, y + 1) {
-            cell.increment_adjacent_trap_count();
+        for offset in ADJACENCY_OFFSET_TABLE {
+            if let Some(cell) = self.get_cell(x + offset.0, y + offset.1) {
+                cell.increment_adjacent_trap_count();
+            }
         }
     }
 
     fn reveal_cell(&mut self, x: i32, y: i32) {
         if let Some(cell) = self.get_cell(x, y) {
             match cell {
-                Cell {is_trap: false, adjacent_trap_count: 0, ..} => {
+                Cell {is_trap: false, adjacent_trap_count: 0, hidden: true} => {
                     cell.reveal();
-                    self.reveal_adjacent_empties(x, y);
+                    for offset in ADJACENCY_OFFSET_TABLE {
+                        self.reveal_cell(x + offset.0, y + offset.1);
+                    }
                 },
-                Cell {is_trap: false, ..} => {
+                _ => {
                     cell.reveal();
                 }
-                _ => {}
-            }
-        }
-    }
-
-    fn reveal_adjacent_empties(&mut self, x: i32, y: i32) {
-        if let Some(cell) = self.get_cell(x, y + 1) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x, y + 1);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x + 1, y + 1) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x + 1, y + 1);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x + 1, y) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x + 1, y);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x + 1, y - 1) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x + 1, y - 1);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x, y - 1) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x, y - 1);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x - 1, y - 1) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x - 1, y - 1);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x - 1, y) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x - 1, y);
-                }
-            }
-        }
-    
-        if let Some(cell) = self.get_cell(x - 1, y + 1) {
-            if let Cell {is_trap: false, hidden: true, ..} = cell {
-                cell.reveal();
-                if cell.adjacent_trap_count == 0 {
-                    self.reveal_adjacent_empties(x - 1, y + 1);
-                }
+                //_ => {}
             }
         }
     }
