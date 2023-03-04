@@ -1,6 +1,6 @@
 extern crate sdl2;
 
-use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture}};
+use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture}, mouse::MouseButton};
 use std::{time::Duration, thread};
 use rand::{self, thread_rng, Rng};
 
@@ -29,7 +29,7 @@ pub fn run() {
     let texture_ctreator = canvas.texture_creator();
     let texture = texture_ctreator.load_texture("assets/spritesheet.png").unwrap();
 
-    let mut cell_map = CellMap::new(9, 9, 12);
+    let mut cell_map = CellMap::new(9, 9, 10);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -39,8 +39,13 @@ pub fn run() {
                 Event:: KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
-                Event:: MouseButtonUp { x, y, ..} => {
-                    handle_left_click(&mut cell_map, x, y)
+                Event:: MouseButtonUp { x, y, mouse_btn, ..} => {
+                    match mouse_btn {
+                        MouseButton::Left => {handle_left_click(&mut cell_map, x, y)},
+                        MouseButton::Right => {handle_right_click(&mut cell_map, x, y)},
+                        _ => {}
+                    }
+
                 }
                 _ => {}
             }
@@ -69,6 +74,10 @@ fn render_cell(canvas: &mut WindowCanvas, texture: &Texture, x: i32, y: i32, cel
         Cell {hidden: true, ..} => {
             let sprite_rect = Rect::new(0, 0, 32, 32);
             render(canvas, texture, sprite_rect, screen_rect);
+            if cell.is_flagged {
+                let sprite_rect = Rect::new(32 * 11, 0, 32, 32);
+                render(canvas, texture, sprite_rect, screen_rect);
+            }
         },
         Cell {hidden: false, ..} => {
             let sprite_rect = Rect::new(32, 0, 32, 32);
@@ -99,9 +108,16 @@ fn handle_left_click(cell_map: &mut CellMap, x: i32, y: i32) {
     cell_map.reveal_cell(x, y);
 }
 
+fn handle_right_click(cell_map: &mut CellMap, x: i32, y: i32) {
+    let (x, y) = ((x - 6)  / 32, (y - 50) / 32);
+
+    cell_map.flag_cell(x, y);
+}
+
 struct Cell {
     hidden: bool,
     is_trap: bool,
+    is_flagged: bool,
     adjacent_trap_count: u8
 }
 
@@ -124,6 +140,7 @@ impl Default for Cell {
         Self { 
             hidden: true, 
             is_trap: false, 
+            is_flagged: false,
             adjacent_trap_count: 0 
         }
     }
@@ -185,17 +202,23 @@ impl CellMap {
 
         if let Some(cell) = self.get_cell(x, y) {
             match cell {
-                Cell {is_trap: false, adjacent_trap_count: 0, hidden: true} => {
+                Cell {is_trap: false, is_flagged: false, adjacent_trap_count: 0, hidden: true} => {
                     cell.reveal();
                     for offset in ADJACENCY_OFFSET_TABLE {
                         self.reveal_cell(x + offset.0, y + offset.1);
                     }
                 },
-                _ => {
+                Cell {is_flagged: false, ..} => {
                     cell.reveal();
                 }
-                //_ => {}
+                _ => {}
             }
+        }
+    }
+
+    fn flag_cell(&mut self, x: i32, y: i32) {
+        if let Some(cell) = self.get_cell(x, y) {
+            cell.is_flagged = !cell.is_flagged;
         }
     }
 
