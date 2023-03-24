@@ -3,7 +3,7 @@ extern crate sdl2;
 mod cell_map;
 use crate::cell_map::*;
 
-use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture}, mouse::MouseButton};
+use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture, RenderTarget}, mouse::MouseButton};
 use std::{time::Duration, thread};
 
 pub fn run() {
@@ -17,12 +17,14 @@ pub fn run() {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
-    let texture_ctreator = canvas.texture_creator();
-    let texture = texture_ctreator.load_texture("assets/spritesheet.png").unwrap();
+    let texture_creator = canvas.texture_creator();
+    let texture = texture_creator.load_texture("assets/spritesheet.png").unwrap();
 
     let mut cell_map = CellMap::new(9, 9, 10);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
+
+    let mut frame = 0;
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -46,7 +48,7 @@ pub fn run() {
         canvas.clear();
 
         let (map_width, map_height) = cell_map.get_dimensions();
-        
+
         for x in 0..map_width {
             for y in 0..map_height {
                 if let Some(cell) = cell_map.get_cell(x as i32, y as i32) {
@@ -55,8 +57,14 @@ pub fn run() {
             }
         }
 
+        render(&mut canvas, &texture, Rect::new(64 * frame, 32, 64, 64), Rect::new(0, 0, 64, 64));
+        frame += 1;
+        if frame == 9 {
+            frame = 0;
+        }
+
         canvas.present();
-        thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        thread::sleep(Duration::new(0, 1_000_000_000u32 / 12));
     }
 }
 
