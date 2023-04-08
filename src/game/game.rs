@@ -3,6 +3,9 @@ extern crate sdl2;
 mod cell_map;
 use crate::cell_map::*;
 
+mod gem_animation;
+use crate::gem_animation::*;
+
 use sdl2::{pixels::Color, keyboard::Keycode, event::Event, image::LoadTexture, rect::Rect, render::{WindowCanvas, Texture, RenderTarget}, mouse::MouseButton};
 use std::{time::Duration, thread};
 
@@ -21,10 +24,10 @@ pub fn run() {
     let texture = texture_creator.load_texture("assets/spritesheet.png").unwrap();
 
     let mut cell_map = CellMap::new(9, 9, 10);
+    let mut gem_animation = GemAnimation::new(300);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let mut frame = 0;
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -44,7 +47,13 @@ pub fn run() {
             }
         }
 
-        canvas.set_draw_color(Color::BLACK);
+        match cell_map.check_status() {
+            CellMapStatus::Normal() |
+            CellMapStatus::Lose() => {},
+            CellMapStatus::Win() => {gem_animation.play()}
+        }
+
+        canvas.set_draw_color(Color::RGB(90, 83, 83));
         canvas.clear();
 
         let (map_width, map_height) = cell_map.get_dimensions();
@@ -57,11 +66,7 @@ pub fn run() {
             }
         }
 
-        render(&mut canvas, &texture, Rect::new(64 * frame, 32, 64, 64), Rect::new(0, 0, 64, 64));
-        frame += 1;
-        if frame == 9 {
-            frame = 0;
-        }
+        gem_animation.render(&mut canvas, &texture);
 
         canvas.present();
         thread::sleep(Duration::new(0, 1_000_000_000u32 / 12));
@@ -69,7 +74,7 @@ pub fn run() {
 }
 
 fn render_cell(canvas: &mut WindowCanvas, texture: &Texture, x: i32, y: i32, cell: &Cell) {
-    let screen_rect = Rect::new(x * 32 + 6, y * 32 + 50, 32, 32);
+    let screen_rect = Rect::new(x * 32 + 6, y * 32 + 105, 32, 32);
 
     match cell.is_hidden() {
         true => {
@@ -104,13 +109,13 @@ fn render(canvas: &mut WindowCanvas, texture: &Texture, sprite_rect: Rect, scree
 }
 
 fn handle_left_click(cell_map: &mut CellMap, x: i32, y: i32) {
-    let (x, y) = ((x - 6)  / 32, (y - 50) / 32);
+    let (x, y) = ((x - 6)  / 32, (y - 105) / 32);
 
     cell_map.reveal_cell(x, y);
 }
 
 fn handle_right_click(cell_map: &mut CellMap, x: i32, y: i32) {
-    let (x, y) = ((x - 6)  / 32, (y - 50) / 32);
+    let (x, y) = ((x - 6)  / 32, (y - 105) / 32);
 
     cell_map.flag_cell(x, y);
 }

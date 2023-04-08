@@ -63,6 +63,12 @@ impl Default for Cell {
     }
 }
 
+pub enum CellMapStatus {
+    Normal(),
+    Win(),
+    Lose()
+}
+
 pub struct CellMap {
     width : usize,
     height : usize,
@@ -161,5 +167,22 @@ impl CellMap {
             }
         }
         self.has_generated = true;
+    }
+
+    pub fn check_status(&self) -> CellMapStatus {
+
+        if self.cells.iter().any(|cell| !cell.hidden && cell.is_trap) {
+            return CellMapStatus::Lose();
+        }
+
+        let revealed_count = self.cells.iter()
+            .filter(|cell| cell.hidden == false)
+            .count();
+
+        if revealed_count + self.trap_count == self.width * self.height {
+            return CellMapStatus::Win();
+        }
+
+        CellMapStatus::Normal()
     }
 }
